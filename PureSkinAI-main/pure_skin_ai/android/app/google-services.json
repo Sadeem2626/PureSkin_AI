@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "83626215267",
+    "project_id": "pureskinai-d4100",
+    "storage_bucket": "pureskinai-d4100.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:83626215267:android:e0c2767d5c3ab81693f556",
+        "android_client_info": {
+          "package_name": "com.example.pure_skin_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuNbywQhrlvQkmTu8XZQn96gPP78EIYlI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
