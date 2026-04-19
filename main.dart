@@ -41,22 +41,38 @@ class _PureSkinAIState extends State<PureSkinAI> {
 
   void _getDiagnosis(int index, double score) {
     _confidence = (score * 100).toInt();
-    if (index >= 0 && index <= 20) {
-      _analysisResult = "Acne / Pimples Detected";
-      _skinType = "Oily Skin";
-      _recommendation = "Salicylic Acid Cleanser & Acne Gel";
-    } else if (index > 20 && index <= 50) {
-      _analysisResult = "Skin Dryness / Dehydration";
-      _skinType = "Dry & Sensitive";
-      _recommendation = "Hyaluronic Acid Moisturizer";
-    } else if (index > 50 && index <= 80) {
-      _analysisResult = "Pigmentation / Dark Spots";
-      _skinType = "Combination Skin";
-      _recommendation = "Vitamin C Serum & Sunscreen";
-    } else {
-      _analysisResult = "Healthy / Minor Irritation";
-      _skinType = "Normal Skin";
-      _recommendation = "Gentle Daily Face Wash";
+
+    // قائمة التصنيفات الخمسة مثل صديقتك
+    List<String> labels = ["Oily", "Dry", "Normal", "Acne", "Eczema"];
+
+    // اختيار النوع بناءً على الرقم اللي عطاه الذكاء الاصطناعي
+    _skinType = labels[index];
+
+    // الحين نحدد الكلام اللي يطلع للمستخدم بناءً على التصنيف
+    switch (_skinType) {
+      case "Oily":
+        _analysisResult = "Bout of Excess Oil";
+        _recommendation = "Foaming Cleanser & Oil-free Moisturizer";
+        break;
+      case "Dry":
+        _analysisResult = "Dryness Detected";
+        _recommendation = "Rich Hydrating Cream & Gentle Wash";
+        break;
+      case "Normal":
+        _analysisResult = "Healthy Skin Balance";
+        _recommendation = "Maintain with Daily Sunscreen";
+        break;
+      case "Acne":
+        _analysisResult = "Acne / Pimples Present";
+        _recommendation = "Salicylic Acid & Spot Treatment";
+        break;
+      case "Eczema":
+        _analysisResult = "Eczema / Redness Detected";
+        _recommendation = "Soothing Eczema Relief Cream";
+        break;
+      default:
+        _analysisResult = "Analysis Complete";
+        _recommendation = "Consult a dermatologist if needed";
     }
   }
 
@@ -72,11 +88,11 @@ class _PureSkinAIState extends State<PureSkinAI> {
         height: 224,
       );
       var input = imageToByteListFloat32(resizedImage, 224);
-      var output = List.filled(1 * 100, 0.0).reshape([1, 100]);
+      var output = List.filled(1 * 5, 0.0).reshape([1, 5]);
       _interpreter!.run(input, output);
       double maxScore = -1.0;
       int highestIndex = 0;
-      for (int i = 0; i < 100; i++) {
+      for (int i = 0; i < 5; i++) {
         if (output[0][i] > maxScore) {
           maxScore = output[0][i];
           highestIndex = i;
