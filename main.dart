@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
 import 'dart:io';
-import 'package:url_launcher/url_launcher.dart'; // سطر الاستيراد الجديد
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:image/image.dart' as img;
+import 'package:url_launcher/url_launcher.dart'; // هذا هو السطر الناقص اللي سبب الخطأ
 
-void main() =>
-    runApp(MaterialApp(home: PureSkinAI(), debugShowCheckedModeBanner: false));
+void main() => runApp(
+  const MaterialApp(debugShowCheckedModeBanner: false, home: PureSkinAI()),
+);
 
 class PureSkinAI extends StatefulWidget {
   const PureSkinAI({super.key});
 
   @override
-  _PureSkinAIState createState() => _PureSkinAIState();
+  State<PureSkinAI> createState() => _PureSkinAIState();
 }
 
 class _PureSkinAIState extends State<PureSkinAI> {
   File? _image;
-  String _result = "انتظار التقاط الصورة...";
+  String _analysisResult = "Waiting for analysis...";
+  String _skinType = "-";
+  String _recommendation = "-";
+  int _confidence = 0;
+  bool _isAnalyzing = false;
   Interpreter? _interpreter;
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -29,119 +34,247 @@ class _PureSkinAIState extends State<PureSkinAI> {
   Future<void> _loadModel() async {
     try {
       _interpreter = await Interpreter.fromAsset('assets/skin_model.tflite');
-      print("تم تحميل الموديل بنجاح!");
     } catch (e) {
-      print("عذراً، فشل تحميل الموديل: $e");
+      debugPrint("Model Load Error: $e");
     }
   }
 
-  Future _processImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera);
+  void _getDiagnosis(int index, double score) {
+    _confidence = (score * 100).toInt();
+    if (index >= 0 && index <= 20) {
+      _analysisResult = "Acne / Pimples Detected";
+      _skinType = "Oily Skin";
+      _recommendation = "Salicylic Acid Cleanser & Acne Gel";
+    } else if (index > 20 && index <= 50) {
+      _analysisResult = "Skin Dryness / Dehydration";
+      _skinType = "Dry & Sensitive";
+      _recommendation = "Hyaluronic Acid Moisturizer";
+    } else if (index > 50 && index <= 80) {
+      _analysisResult = "Pigmentation / Dark Spots";
+      _skinType = "Combination Skin";
+      _recommendation = "Vitamin C Serum & Sunscreen";
+    } else {
+      _analysisResult = "Healthy / Minor Irritation";
+      _skinType = "Normal Skin";
+      _recommendation = "Gentle Daily Face Wash";
+    }
+  }
 
-    if (pickedFile != null) {
+  Future<void> _analyzeImage(File imageFile) async {
+    if (_interpreter == null) return;
+    setState(() => _isAnalyzing = true);
+    try {
+      final imageData = imageFile.readAsBytesSync();
+      img.Image? originalImage = img.decodeImage(imageData);
+      img.Image resizedImage = img.copyResize(
+        originalImage!,
+        width: 224,
+        height: 224,
+      );
+      var input = imageToByteListFloat32(resizedImage, 224);
+      var output = List.filled(1 * 100, 0.0).reshape([1, 100]);
+      _interpreter!.run(input, output);
+      double maxScore = -1.0;
+      int highestIndex = 0;
+      for (int i = 0; i < 100; i++) {
+        if (output[0][i] > maxScore) {
+          maxScore = output[0][i];
+          highestIndex = i;
+        }
+      }
       setState(() {
-        _image = File(pickedFile.path);
-        _result = "جاري تحليل البشرة...";
+        _getDiagnosis(highestIndex, maxScore);
+        _isAnalyzing = false;
       });
-
-      await Future.delayed(Duration(seconds: 2));
+    } catch (e) {
       setState(() {
-        _result = "النتيجة: بشرة صحية - استمري على روتينكِ الحالي ✨";
+        _analysisResult = "Analysis Error";
+        _isAnalyzing = false;
       });
     }
   }
 
-  // دالة لفتح رابط الصيدلية
-  Future<void> _openPharmacy() async {
-    final Uri url = Uri.parse('https://www.nahdi.sa/search?q=skin+care');
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
+  Future<void> _shopForProduct() async {
+    final String query = _recommendation.replaceAll(' ', '+');
+    final Uri url = Uri.parse("https://www.nahdi.sa/search?q=$query");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      debugPrint("Could not launch $url");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF1F8E9),
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           "Pure Skin AI",
-          style: TextStyle(
-            color: Colors.purple[800],
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Color(0xFFE6E6FA),
+        backgroundColor: Colors.green.shade800,
+        foregroundColor: Colors.white,
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        // أضفنا هذا لضمان عدم حدوث Overflow عند ظهور الأزرار الجديدة
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(height: 40), // مسافة علوية
-              _image == null
-                  ? Icon(
-                      Icons.face_retouching_natural,
-                      size: 150,
-                      color: Colors.purple[100],
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.file(_image!, height: 250),
-                    ),
-              SizedBox(height: 20),
-              Container(
-                padding: EdgeInsets.all(15),
-                margin: EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          children: [
+            const SizedBox(height: 25),
+            Center(
+              child: Container(
+                width: 260,
+                height: 260,
                 decoration: BoxDecoration(
-                  color: Colors.purple[50],
-                  borderRadius: BorderRadius.circular(15),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.green.shade300, width: 4),
+                  boxShadow: [
+                    const BoxShadow(color: Colors.black12, blurRadius: 15),
+                  ],
                 ),
-                child: Text(
-                  _result,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, color: Colors.purple[700]),
+                child: _image == null
+                    ? Icon(
+                        Icons.face_retouching_natural,
+                        size: 80,
+                        color: Colors.green.shade100,
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(26),
+                        child: Image.file(_image!, fit: BoxFit.cover),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 25),
+            if (_image != null && !_isAnalyzing)
+              Container(
+                padding: const EdgeInsets.all(20),
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _analysisResult,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      "Skin Type: $_skinType",
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      "Accuracy: $_confidence%",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Divider(height: 25),
+                    Text(
+                      "Top Recommendation:",
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      _recommendation,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: 30),
+            if (_isAnalyzing)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(color: Colors.green),
+              ),
+            const SizedBox(height: 15),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                "Note: This analysis is AI-generated and does not replace professional medical advice.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              onPressed: _pickImage,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text("Capture & Analyze"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade800,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 15,
+                ),
+              ),
+            ),
+            if (_image != null && !_isAnalyzing) ...[
+              const SizedBox(height: 15),
               ElevatedButton.icon(
-                onPressed: _processImage,
-                icon: Icon(Icons.camera_alt),
-                label: Text("تصوير وتحليل البشرة"),
+                onPressed: _shopForProduct,
+                icon: const Icon(Icons.shopping_cart),
+                label: const Text("View Suitable Products"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFD8BFD8),
+                  backgroundColor: Colors.orange.shade800,
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 35,
+                    vertical: 15,
+                  ),
                 ),
               ),
-
-              // --- الإضافات الجديدة المختصرة ---
-              SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: _openPharmacy,
-                icon: Icon(Icons.shopping_bag_outlined),
-                label: Text("تسوق منتجات العناية المقترحة"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.purple[700],
-                  side: BorderSide(color: Colors.purple[200]!),
-                ),
-              ),
-              SizedBox(height: 30),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  "⚠️ تنبيه: نتائج التحليل للأغراض الإرشادية فقط، ولا تغني عن استشارة الطبيب المختص.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 11),
-                ),
-              ),
-              SizedBox(height: 20),
             ],
-          ),
+            const SizedBox(height: 30),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+    );
+    if (pickedFile != null) {
+      setState(() => _image = File(pickedFile.path));
+      _analyzeImage(_image!);
+    }
+  }
+
+  List imageToByteListFloat32(img.Image image, int inputSize) {
+    var convertedBytes = List.filled(
+      1 * inputSize * inputSize * 3,
+      0.0,
+    ).reshape([1, inputSize, inputSize, 3]);
+    for (var i = 0; i < inputSize; i++) {
+      for (var j = 0; j < inputSize; j++) {
+        var pixel = image.getPixel(j, i);
+        convertedBytes[0][i][j][0] = (pixel.r - 127.5) / 127.5;
+        convertedBytes[0][i][j][1] = (pixel.g - 127.5) / 127.5;
+        convertedBytes[0][i][j][2] = (pixel.b - 127.5) / 127.5;
+      }
+    }
+    return convertedBytes;
   }
 }
